@@ -24,7 +24,6 @@ namespace SerialDSP
         private bool _hasBegin = false;
         //Signals to control IO event handler
         private volatile bool _needClose = false;
-        private bool _needHalt = true;
         private int _integrateWindow = 16;
         private int _horizonPoints, _verticalPoints;
         private readonly Integration _integration = new Integration();
@@ -137,8 +136,16 @@ namespace SerialDSP
                     //Close port in handler and hence the IO thread so that it can be close before any other envents are fired
                     if (_needClose)
                     {
-                        _port.Close();
-                        _needClose = false;
+                        try
+                        {
+                            _port.Close();
+                            _needClose = false;
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"Failed to close port {_port.PortName}: {ex.Message}", "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
                     }
                 }
             }
@@ -168,15 +175,7 @@ namespace SerialDSP
         {
             if (_hasBegin) //action of stop
             {
-                try
-                {
-                    _needClose = true;
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Failed to close port {_port.PortName}: {ex.Message}", "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
+                _needClose = true;
                 beginBtn.Text = "Begin";
                 beginBtn.BackColor = Color.FromArgb(27, 161, 226);
                 beginBtn.FlatAppearance.BorderColor = Color.FromArgb(0, 122, 204);
@@ -209,8 +208,6 @@ namespace SerialDSP
             }
             serialGroupBox.Enabled = _hasBegin;
             _hasBegin = !_hasBegin;
-            //UI update done. Set halt to false
-            _needHalt = false;
         }
 
         //DSP
