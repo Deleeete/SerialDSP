@@ -20,11 +20,9 @@ namespace SerialDSP
         private readonly Action<string, string> _setPrintLbl;
         private readonly Action<float, float> _updateOutChart;
         private bool _hasBegin = false;
-        private float _integrationIn = 0, _integrationOut = 0;
         private int _integrateWindow = 16;
         private int _horizonPoints, _verticalPoints;
-        private readonly Queue<float> _bufferIn = new Queue<float>();
-        private readonly Queue<float> _bufferOut = new Queue<float>();
+        private readonly Integration _integration = new Integration();
 
         public int IntegrationWindow 
         {
@@ -32,18 +30,7 @@ namespace SerialDSP
             private set 
             {
                 _integrateWindow = value;
-                //add zeros if expansion required 
-                while (_bufferIn.Count < _integrateWindow)
-                {
-                    _bufferIn.Enqueue(0);
-                    _bufferOut.Enqueue(0);
-                }
-                //remove heads if shrinking required
-                while (_bufferOut.Count < _integrateWindow)
-                {
-                    _bufferIn.Dequeue();
-                    _bufferOut.Dequeue();
-                }
+                _integration.WindowSize = value;
                 windowLbl.Text = _integrateWindow.ToString();
             } 
         }
@@ -71,7 +58,6 @@ namespace SerialDSP
 
         public MainForm()
         {
-            //Generate.Sinusoidal(250, 44100, 350, 20);
             InitializeComponent();
             LoadAvailablePorts(false);
             _setPrintLbl = (s, t) => { printInPhaseLbl.Text = s; printOutPhaseLbl.Text = t; };
@@ -118,14 +104,13 @@ namespace SerialDSP
                 if (_dataPat.IsMatch(s))
                 {
                     var groups = _dataPat.Match(s).Groups;
-                    float inPhase = BitConverter.ToSingle(BitConverter.GetBytes(int.Parse(groups[1].Value)), 0);
-                    float outPhase = BitConverter.ToSingle(BitConverter.GetBytes(int.Parse(groups[2].Value)), 0);
-                    _integrationIn = _integrationIn + inPhase - _bufferIn.Dequeue();
-                    _integrationOut = _integrationOut + outPhase - _bufferOut.Dequeue();
-                    float meanIn = _integrationIn / IntegrationWindow;
-                    float meanOut = _integrationOut / IntegrationWindow;
+                    float inPhase = int.Parse(groups[1].Value);
+                    float outOfPhase = int.Parse(groups[2].Value);
+                    _integration.Roll(inPhase, outOfPhase);
+                    float meanIn = _integration.ValueInPhase;
+                    float meanOut = _integration.ValueOutOfPhase;
                     SetPrintLblText($"{meanIn:f4}", $"{meanOut:f4}");
-                    UpdateChart(_integrationIn, _integrationOut);
+                    UpdateChart(meanIn, meanOut);
                 }
             }
             catch (Exception ex)
@@ -154,8 +139,6 @@ namespace SerialDSP
         {
             lock (_port)  //lock port from being used by IO thread
             {
-                //reset integration vars
-                _integrationIn = _integrationOut = 0;
                 if (_hasBegin) //action of stop
                 {
                     try
@@ -193,8 +176,7 @@ namespace SerialDSP
                         _port.Close();
                         return;
                     }
-                    _bufferIn.Clear();
-                    _bufferOut.Clear();
+                    _integration.Reset();
                     beginBtn.Text = "End";
                     beginBtn.BackColor = Color.FromArgb(255, 109, 54);
                     beginBtn.FlatAppearance.BorderColor = Color.FromArgb(255, 128, 0);
@@ -212,13 +194,21 @@ namespace SerialDSP
             //printInPhaseLbl.Text = printOutPhaseLbl.Text = "Pending...";
         }
 
-        //Graphic
+        //Chart
         private void UpdateChart(float ip, float op)
         {
             if (outChart.InvokeRequired)
                 Invoke(_updateOutChart, new object[] { ip, op });
             else
                 _updateOutChart(ip, op);
+        }
+        private void OutChartVerticalScroll(object sender, EventArgs e)
+        {
+            VerticalPoints = outChartVerticalTrack.Value;
+        }
+        private void OutChartHorizonTrackerScroll(object sender, EventArgs e)
+        {
+            HorizontalPoints = outChartHorizonTrack.Value;
         }
 
         //Cross-thread methods
@@ -237,16 +227,5 @@ namespace SerialDSP
                 serie.Points.Clear();
             }
         }
-
-        //Chart scale
-        private void OutChartVerticalScroll(object sender, EventArgs e)
-        {
-            VerticalPoints = outChartVerticalTrack.Value;
-        }
-        private void OutChartHorizonTrackerScroll(object sender, EventArgs e)
-        {
-            HorizontalPoints = outChartHorizonTrack.Value;
-        }
-
     }
 }
