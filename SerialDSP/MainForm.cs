@@ -137,61 +137,58 @@ namespace SerialDSP
         //General
         private void BeginProcess(object sender, EventArgs e)
         {
-            lock (_port)  //lock port from being used by IO thread
+            if (_hasBegin) //action of stop
             {
-                if (_hasBegin) //action of stop
+                try
                 {
-                    try
-                    {
-                        //clear buffer before end
-                        _port.DiscardInBuffer();
-                        _port.Close();
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"Failed to close port {_port.PortName}: {ex.Message}", "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return;
-                    }
-                    beginBtn.Text = "Start";
-                    beginBtn.BackColor = Color.FromArgb(27, 161, 226);
-                    beginBtn.FlatAppearance.BorderColor = Color.FromArgb(0, 122, 204);
-                    beginBtn.FlatAppearance.MouseOverBackColor = Color.FromArgb(122, 193, 255);
+                    //clear buffer before end
+                    _port.DiscardInBuffer();
+                    _port.Close();
                 }
-                else
+                catch (Exception ex)
                 {
-                    try
-                    {
-                        if (_port.IsOpen)
-                            _port.Close();
-                        _port.BaudRate = (int)baudNumericBox.Value;
-                        _port.ReadBufferSize = (int)readBufferNumericBox.Value;
-                        _port.DataReceived += DataReceived;
-                        _port.Open();
-                        //clear buffer at each start
-                        _port.DiscardInBuffer();
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"Fatal error: Failed to open port {_port.PortName}: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        _port.Close();
-                        return;
-                    }
-                    _integration.Reset();
-                    beginBtn.Text = "End";
-                    beginBtn.BackColor = Color.FromArgb(255, 109, 54);
-                    beginBtn.FlatAppearance.BorderColor = Color.FromArgb(255, 128, 0);
-                    beginBtn.FlatAppearance.MouseOverBackColor = Color.FromArgb(215, 172, 106);
+                    MessageBox.Show($"Failed to close port {_port.PortName}: {ex.Message}", "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
                 }
-                serialGroupBox.Enabled = _hasBegin;
-                _hasBegin = !_hasBegin;
+                beginBtn.Text = "Begin";
+                beginBtn.BackColor = Color.FromArgb(27, 161, 226);
+                beginBtn.FlatAppearance.BorderColor = Color.FromArgb(0, 122, 204);
+                beginBtn.FlatAppearance.MouseOverBackColor = Color.FromArgb(122, 193, 255);
             }
+            else
+            {
+                try
+                {
+                    if (_port.IsOpen)
+                        _port.Close();
+                    _port.BaudRate = (int)baudNumericBox.Value;
+                    _port.ReadBufferSize = (int)readBufferNumericBox.Value;
+                    _port.DataReceived += DataReceived;
+                    _port.Open();
+                    //clear buffer at each start
+                    _port.DiscardInBuffer();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Fatal error: Failed to open port {_port.PortName}: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    _port.Close();
+                    return;
+                }
+                _integration.Reset();
+                beginBtn.Text = "End";
+                beginBtn.BackColor = Color.FromArgb(255, 109, 54);
+                beginBtn.FlatAppearance.BorderColor = Color.FromArgb(255, 128, 0);
+                beginBtn.FlatAppearance.MouseOverBackColor = Color.FromArgb(215, 172, 106);
+            }
+            serialGroupBox.Enabled = _hasBegin;
+            _hasBegin = !_hasBegin;
         }
 
         //DSP
         private void WindowTrackScroll(object sender, EventArgs e)
         {
-            IntegrationWindow = windowTrackbar.Value;
-            //printInPhaseLbl.Text = printOutPhaseLbl.Text = "Pending...";
+            _integration.WindowSize = windowTrackbar.Value;
+            windowLbl.Text = _integration.WindowSize.ToString();
         }
 
         //Chart
