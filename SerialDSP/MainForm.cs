@@ -27,8 +27,8 @@ namespace SerialDSP
         private int _integrateWindow = 16;
         private int _horizonPoints, _verticalPoints;
         private readonly Integration _integration = new Integration();
-        private readonly List<float> _inBuffer = new List<float>();
-        private readonly List<float> _outBuffer = new List<float>();
+        private readonly List<float> _inDataBatch = new List<float>();
+        private readonly List<float> _outDataBatch = new List<float>();
 
         public int IntegrationWindow 
         {
@@ -125,13 +125,13 @@ namespace SerialDSP
                     float outOfPhase = int.Parse(groups[2].Value);
                     _integration.Roll(inPhase, outOfPhase);
                     //Save new values to buffers
-                    _inBuffer.Add(_integration.AverageInPhase);
-                    _outBuffer.Add(_integration.AverageOutOfPhase);
+                    _inDataBatch.Add(_integration.AverageInPhase);
+                    _outDataBatch.Add(_integration.AverageOutOfPhase);
                     //When it's enough for an update, do it and clear the buffer
-                    if (_inBuffer.Count >= UpdateBatchSize)
+                    if (_inDataBatch.Count >= UpdateBatchSize)
                     {
-                        SetPrintLblText($"{_inBuffer.Last():f4}", $"{_outBuffer.Last():f4}");
-                        UpdateChart(_inBuffer, _outBuffer);
+                        SetPrintLblText($"{_inDataBatch.Last():f4}", $"{_outDataBatch.Last():f4}");
+                        UpdateChart(_inDataBatch, _outDataBatch);
                     }
                     //Close port in handler and hence the IO thread so that it can be close before any other envents are fired
                     if (_needClose)
