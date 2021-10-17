@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.IO.Ports;
+using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows.Forms;
 using MathNet.Filtering;
 using MathNet.Filtering.FIR;
@@ -18,11 +20,16 @@ namespace SerialDSP
         private readonly OnlineFilter lpf = OnlineFilter.CreateLowpass(ImpulseResponse.Finite, 250, 25);
         //delegate for other threads to invoke
         private readonly Action<string, string> _setPrintLbl;
-        private readonly Action<float, float> _updateOutChart;
+        private readonly Action<List<float>, List<float>> _updateOutChart;
         private bool _hasBegin = false;
+        //Signals to control IO event handler
+        private volatile bool _needClose = false;
+        private bool _needHalt = true;
         private int _integrateWindow = 16;
         private int _horizonPoints, _verticalPoints;
         private readonly Integration _integration = new Integration();
+        private readonly List<float> _inBuffer = new List<float>();
+        private readonly List<float> _outBuffer = new List<float>();
 
         public int IntegrationWindow 
         {
@@ -55,6 +62,7 @@ namespace SerialDSP
                 outChart.ChartAreas[0].AxisY.Maximum = half;
             }
         }
+        public int UpdateBatchSize { get; set; }
 
         public MainForm()
         {
@@ -63,18 +71,28 @@ namespace SerialDSP
             _setPrintLbl = (s, t) => { printInPhaseLbl.Text = s; printOutPhaseLbl.Text = t; };
             var axisx = outChart.ChartAreas[0].AxisX;
             axisx.MajorGrid.LineColor = Color.FromArgb(41, 111, 112);
-            _updateOutChart = (ip, op) => 
+            _updateOutChart = (ins, outs) => 
             {
-                var inps = outChart.Series["In-phase"];
-                inps.Points.AddY(ip);
-                //outChart.ChartAreas[0].CursorX.IsUserEnabled = true; ;
-                if (inps.Points.Count >= _horizonPoints)
-                    outChart.ChartAreas[0].AxisX.Minimum = outChart.ChartAreas[0].AxisX.Maximum - _horizonPoints;
-                outChart.Series["Out-of-phase"].Points.AddY(op);
-                outChart.Series["Modulus"].Points.AddY(Math.Sqrt(ip*ip + op*op));
+                for (int i = 0; i < ins.Count; i++)
+                {
+                    float inValue = ins[i];
+                    float outValue = outs[i];
+                    var inps = outChart.Series["In-phase"];
+                    inps.Points.AddY(inValue);
+                    //rolling X axis
+                    if (inps.Points.Count >= _horizonPoints)
+                        outChart.ChartAreas[0].AxisX.Minimum = outChart.ChartAreas[0].AxisX.Maximum - _horizonPoints;
+                    outChart.Series["Out-of-phase"].Points.AddY(outValue);
+                    outChart.Series["Modulus"].Points.AddY(Math.Sqrt(inValue * inValue + outValue * outValue));
+                }
+                //Clear buffer after update to UI
+                ins.Clear();
+                outs.Clear();
             };
+            //Load setup from UI
             IntegrationWindow = windowTrackbar.Value;
             HorizontalPoints = outChartHorizonTrack.Value;
+            UpdateBatchSize = (int)updateBatchSizeBox.Value;
         }
 
         //Serial COM
@@ -107,10 +125,21 @@ namespace SerialDSP
                     float inPhase = int.Parse(groups[1].Value);
                     float outOfPhase = int.Parse(groups[2].Value);
                     _integration.Roll(inPhase, outOfPhase);
-                    float meanIn = _integration.ValueInPhase;
-                    float meanOut = _integration.ValueOutOfPhase;
-                    SetPrintLblText($"{meanIn:f4}", $"{meanOut:f4}");
-                    UpdateChart(meanIn, meanOut);
+                    //Save new values to buffers
+                    _inBuffer.Add(_integration.AverageInPhase);
+                    _outBuffer.Add(_integration.AverageOutOfPhase);
+                    //When it's enough for an update, do it and clear the buffer
+                    if (_inBuffer.Count >= UpdateBatchSize)
+                    {
+                        SetPrintLblText($"{_inBuffer.Last():f4}", $"{_outBuffer.Last():f4}");
+                        UpdateChart(_inBuffer, _outBuffer);
+                    }
+                    //Close port in handler and hence the IO thread so that it can be close before any other envents are fired
+                    if (_needClose)
+                    {
+                        _port.Close();
+                        _needClose = false;
+                    }
                 }
             }
             catch (Exception ex)
@@ -141,9 +170,7 @@ namespace SerialDSP
             {
                 try
                 {
-                    //clear buffer before end
-                    _port.DiscardInBuffer();
-                    _port.Close();
+                    _needClose = true;
                 }
                 catch (Exception ex)
                 {
@@ -182,23 +209,18 @@ namespace SerialDSP
             }
             serialGroupBox.Enabled = _hasBegin;
             _hasBegin = !_hasBegin;
+            //UI update done. Set halt to false
+            _needHalt = false;
         }
 
         //DSP
         private void WindowTrackScroll(object sender, EventArgs e)
         {
             _integration.WindowSize = windowTrackbar.Value;
-            windowLbl.Text = _integration.WindowSize.ToString();
+            windowLbl.Text = windowTrackbar.Value.ToString();
         }
 
         //Chart
-        private void UpdateChart(float ip, float op)
-        {
-            if (outChart.InvokeRequired)
-                Invoke(_updateOutChart, new object[] { ip, op });
-            else
-                _updateOutChart(ip, op);
-        }
         private void OutChartVerticalScroll(object sender, EventArgs e)
         {
             VerticalPoints = outChartVerticalTrack.Value;
@@ -206,6 +228,10 @@ namespace SerialDSP
         private void OutChartHorizonTrackerScroll(object sender, EventArgs e)
         {
             HorizontalPoints = outChartHorizonTrack.Value;
+        }
+        private void UpdateBatchSizeChanged(object sender, EventArgs e)
+        {
+            UpdateBatchSize = (int)updateBatchSizeBox.Value;
         }
 
         //Cross-thread methods
@@ -216,6 +242,15 @@ namespace SerialDSP
             else
                 _setPrintLbl(s, t);
         }
+        private void UpdateChart(List<float> ip, List<float> op)
+        {
+            if (outChart.InvokeRequired)
+                Invoke(_updateOutChart, new object[] { ip, op });
+            else
+                _updateOutChart(ip, op);
+        }
+
+
         private void ClearOutChartBtn_Click(object sender, EventArgs e)
         {
             outChart.ChartAreas[0].AxisX.Minimum = 0;

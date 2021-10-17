@@ -65,11 +65,12 @@ namespace SerialDSP
         {
             _bufferIn.Clear();
             _bufferOut.Clear();
-            for (int i = 0; i < WindowSize; i++)
+            for (int i = 0; i < _size; i++)
             {
                 _bufferIn.Enqueue(0f);
                 _bufferOut.Enqueue(0f);
             }
+            _sumIn = _sumOut = 0f;
         }
     }
 }
