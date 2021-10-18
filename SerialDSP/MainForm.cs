@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
+using System.Windows.Forms.DataVisualization.Charting;
 using MathNet.Filtering;
 using MathNet.Filtering.FIR;
 using MathNet.Numerics;
@@ -15,6 +16,7 @@ namespace SerialDSP
 {
     public partial class MainForm : Form
     {
+        
         private readonly Regex _dataPat = new Regex(@"(-?\d+),(-?\d+)");
         private readonly SerialPort _port = new SerialPort();
         private readonly OnlineFilter lpf = OnlineFilter.CreateLowpass(ImpulseResponse.Finite, 250, 25);
@@ -24,22 +26,14 @@ namespace SerialDSP
         private bool _hasBegin = false;
         //Signals to control IO event handler
         private volatile bool _needClose = false;
-        private int _integrateWindow = 16;
-        private int _horizonPoints, _verticalPoints;
-        private readonly Integration _integration = new Integration();
+        //Chart scaling
+        private int _horizonPoints;
+        //Chart update batches
         private readonly List<float> _inDataBatch = new List<float>();
         private readonly List<float> _outDataBatch = new List<float>();
+        //Integration wrapper
+        private readonly Integration _integration = new Integration();
 
-        public int IntegrationWindow 
-        {
-            get => _integrateWindow;
-            private set 
-            {
-                _integrateWindow = value;
-                _integration.WindowSize = value;
-                windowLbl.Text = _integrateWindow.ToString();
-            } 
-        }
         public int HorizontalPoints
         {
             get => _horizonPoints;
@@ -49,23 +43,13 @@ namespace SerialDSP
                 horizonPointsLbl.Text = _horizonPoints.ToString();
             }
         }
-        public int VerticalPoints
-        {
-            get => _verticalPoints;
-            set
-            {
-                _verticalPoints = value;
-                verticalPointsLbl.Text = _verticalPoints.ToString();
-                int half = _verticalPoints / 2;
-                outChart.ChartAreas[0].AxisY.Minimum = -half;
-                outChart.ChartAreas[0].AxisY.Maximum = half;
-            }
-        }
         public int UpdateBatchSize { get; set; }
 
         public MainForm()
         {
             InitializeComponent();
+            //manually-bind event handler
+            outChart.MouseWheel += OutChartMouseWheel;
             LoadAvailablePorts(false);
             _setPrintLbl = (s, t) => { printInPhaseLbl.Text = s; printOutPhaseLbl.Text = t; };
             var axisx = outChart.ChartAreas[0].AxisX;
@@ -89,7 +73,7 @@ namespace SerialDSP
                 outs.Clear();
             };
             //Load setup from UI
-            IntegrationWindow = windowTrackbar.Value;
+            WindowTrackScroll(null, null);    //fire windowTrackbar ValueChanged event manually
             HorizontalPoints = outChartHorizonTrack.Value;
             UpdateBatchSize = (int)updateBatchSizeBox.Value;
         }
@@ -218,17 +202,30 @@ namespace SerialDSP
         }
 
         //Chart
-        private void OutChartVerticalScroll(object sender, EventArgs e)
-        {
-            VerticalPoints = outChartVerticalTrack.Value;
-        }
         private void OutChartHorizonTrackerScroll(object sender, EventArgs e)
         {
             HorizontalPoints = outChartHorizonTrack.Value;
         }
+        private void OutChartMouseWheel(object sender, MouseEventArgs e)
+        {
+            if (e.Delta < 0)
+            {
+                double original = outChart.ChartAreas[0].AxisY.Minimum;
+                outChart.ChartAreas[0].AxisY.Minimum = Math.Round(original * 1.25, 1);
+                outChart.ChartAreas[0].AxisY.Maximum = -original;
+            }
+            else if (e.Delta > 0)
+            {
+                double original = outChart.ChartAreas[0].AxisY.Minimum;
+                outChart.ChartAreas[0].AxisY.Minimum = Math.Round(original / 1.25, 1);
+                outChart.ChartAreas[0].AxisY.Maximum = -original;
+            }
+        }
         private void UpdateBatchSizeChanged(object sender, EventArgs e)
         {
             UpdateBatchSize = (int)updateBatchSizeBox.Value;
+            _inDataBatch.Clear();
+            _outDataBatch.Clear();
         }
 
         //Cross-thread methods
