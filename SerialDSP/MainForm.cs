@@ -58,12 +58,14 @@ namespace SerialDSP
                 horizonPointsLbl.Text = _horizonPoints.ToString();
             }
         }
+        public int MaxDrawPoints { get; set; }
         public int UpdateBatchSize { get; set; }
 
         public MainForm()
         {
             InitializeComponent();
             //Init stuff
+            MaxDrawPoints = chartHorizonTrack.Maximum;
             _intgX = integralChart.ChartAreas[0].AxisX;
             _intgY = integralChart.ChartAreas[0].AxisY;
             _mpsX = mpsChart.ChartAreas[0].AxisX;
@@ -82,7 +84,7 @@ namespace SerialDSP
 
             //manually-bind event handler
             integralChart.MouseWheel += OnIntgChartMouseWheel;
-            _intgX.Interval = 256;
+            _intgX.Interval = 0;
 
             //import delegates
             _setPrintLbl = (s, t) => { printInPhaseLbl.Text = s; printOutPhaseLbl.Text = t; };
@@ -91,7 +93,9 @@ namespace SerialDSP
                 mpsLbl.Text = mps.ToString("f1") + " Mps";
                 _mpsSeries.Points.AddY(mps);
                 //rolling X axis
-                if (_mpsSeries.Points.Count >= _horizonPoints)
+                if (_mpsSeries.Points.Count >= MaxDrawPoints)
+                    _mpsSeries.Points.Clear();
+                else if (_mpsSeries.Points.Count >= _horizonPoints)
                     _mpsX.Minimum = _mpsX.Maximum - _horizonPoints;
             };
             _updateIntegralChart = (iIntgs, oIntgs) =>
@@ -102,16 +106,30 @@ namespace SerialDSP
                     _intgInSeries.Points.AddY(iIntg);
                     _intgOutSeries.Points.AddY(oIntg);
                     _intgModulusSeries.Points.AddY(Math.Sqrt(iIntg * iIntg + oIntg * oIntg));
+                    _intgInSeries.Points.RemoveAt(0);
+                    _intgOutSeries.Points.RemoveAt(0);
+                    _intgModulusSeries.Points.RemoveAt(0);
                 }
                 //rolling X axis
-                if (_intgInSeries.Points.Count >= _horizonPoints)
+                if (_intgInSeries.Points.Count > _horizonPoints)
                     _intgX.Minimum = _intgX.Maximum - _horizonPoints;
             };
 
             //Load setup from UI
             WindowTrackScroll(null, null);    //fire windowTrackbar ValueChanged event manually
-            HorizontalPoints = outChartHorizonTrack.Value;
+            HorizontalPoints = chartHorizonTrack.Value;
             UpdateBatchSize = (int)updateBatchSizeBox.Value;
+
+            //init charts with zeros
+            for (int i = 0; i < chartHorizonTrack.Maximum; i++)
+            {
+                _mpsSeries.Points.AddY(0);
+                _intgInSeries.Points.AddY(0);
+                _intgOutSeries.Points.AddY(0);
+                _intgModulusSeries.Points.AddY(0);
+            }
+            _intgY.Minimum = -1024;
+            _intgY.Maximum = 1024;
         }
 
         //Serial COM
@@ -145,6 +163,7 @@ namespace SerialDSP
                 {
                     _sw.Stop();
                     UpdateMps(50_000f / _sw.ElapsedMilliseconds);
+                    SetPrintLblText($"{_inIntegrationBatch.Last():f4}", $"{_outIntegrationBatch.Last():f4}");
                     _sw.Reset();
                     _count = 0;
                     _sw.Start();
@@ -159,7 +178,6 @@ namespace SerialDSP
                 //When it's enough for an update, do it and clear the buffer
                 if (_inIntegrationBatch.Count >= UpdateBatchSize)
                 {
-                    SetPrintLblText($"{_inIntegrationBatch.Last():f4}", $"{_outIntegrationBatch.Last():f4}");
                     UpdateChart(_inIntegrationBatch, _outIntegrationBatch);
                     //Clear buffer after update to UI
                     _inIntegrationBatch.Clear();
@@ -221,9 +239,9 @@ namespace SerialDSP
         }
 
         //Chart
-        private void OutChartHorizonTrackerScroll(object sender, EventArgs e)
+        private void ChartHorizonTrackerScroll(object sender, EventArgs e)
         {
-            HorizontalPoints = outChartHorizonTrack.Value;
+            HorizontalPoints = chartHorizonTrack.Value;
         }
         private void OnIntgChartMouseWheel(object sender, MouseEventArgs e)
         {
