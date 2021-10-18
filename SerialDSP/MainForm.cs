@@ -317,6 +317,13 @@ namespace SerialDSP
             else
                 _updateMps(mps);
         }
+
+        private void OnClose(object sender, FormClosedEventArgs e)
+        {
+            _dataLoopThread.Abort();
+            Environment.Exit(0);
+        }
+
         private void UpdateChart(List<float> iIntgs, List<float> oIntgs)
         {
             if (integralChart.InvokeRequired)
