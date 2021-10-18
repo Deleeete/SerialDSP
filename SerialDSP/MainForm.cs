@@ -2,37 +2,46 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
-using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
-using MathNet.Filtering;
-using MathNet.Filtering.FIR;
-using MathNet.Numerics;
 
 namespace SerialDSP
 {
     public partial class MainForm : Form
     {
-
+        //diagnostic data
+        private readonly Stopwatch _sw = new Stopwatch();
+        private volatile int _count = 0;
+        //pre-saved vars
         private readonly Regex _dataPat = new Regex(@"(-?\d+),(-?\d+)");
         private readonly SerialPort _port = new SerialPort();
+#pragma warning disable IDE0052 
+        private readonly Axis _intgY, _intgX, _mpsX, _mpsY;
+#pragma warning restore IDE0052
+        private readonly Series _intgInSeries;
+        private readonly Series _intgOutSeries;
+        private readonly Series _intgModulusSeries;
+        private readonly Series _mpsSeries;
+
+
         // private readonly OnlineFilter lpf = OnlineFilter.CreateLowpass(ImpulseResponse.Finite, 250, 1);
-        //delegate for other threads to invoke
+        //delegate for other threads to invoke and corresponding argument arrays that minimize heap alloc and hence GC
         private readonly Action<string, string> _setPrintLbl;
-        private readonly Action<List<float>, List<float>, List<float>, List<float>> _updateOutChart;
+        private readonly object[] _setPrintLbl_Args = new object[2]; 
+        private readonly Action<float> _updateMps;
+        private readonly object[] _updateMps_Args = new object[1];
+        private readonly Action<List<float>, List<float>> _updateIntegralChart;
+        private readonly object[] _updateIntegralChart_Args = new object[2];
         private bool _hasBegin = false;
         //Chart scaling
         private int _horizonPoints;
         //Chart update batches
         private readonly List<float> _inIntegrationBatch = new List<float>();
         private readonly List<float> _outIntegrationBatch = new List<float>();
-        private readonly List<float> _inLPFBatch = new List<float>();
-        private readonly List<float> _outLPFBatch = new List<float>();
         //Integration wrapper
         private readonly Integration _integration = new Integration();
         //Data fetch&processing loop
@@ -54,6 +63,16 @@ namespace SerialDSP
         public MainForm()
         {
             InitializeComponent();
+            //Init stuff
+            _intgX = integralChart.ChartAreas[0].AxisX;
+            _intgY = integralChart.ChartAreas[0].AxisY;
+            _mpsX = mpsChart.ChartAreas[0].AxisX;
+            _mpsY = mpsChart.ChartAreas[0].AxisY;
+            _intgInSeries = integralChart.Series["In-phase"];
+            _intgOutSeries = integralChart.Series["Out-of-phase"];
+            _intgModulusSeries = integralChart.Series["Modulus"];
+            _mpsSeries = mpsChart.Series["Mps"];
+            mpsLbl.Text = string.Empty;
             //Serial port setup
             _port.DataBits = 8;
             _port.StopBits = StopBits.One;
@@ -62,21 +81,31 @@ namespace SerialDSP
             LoadAvailablePorts(false);
 
             //manually-bind event handler
-            integralChart.MouseWheel += OnChartMouseWheel;
-            integralChart.ChartAreas[0].AxisX.Interval = 256;
-            lpfChart.MouseWheel += OnChartMouseWheel;
+            integralChart.MouseWheel += OnIntgChartMouseWheel;
+            _intgX.Interval = 256;
 
             //import delegates
             _setPrintLbl = (s, t) => { printInPhaseLbl.Text = s; printOutPhaseLbl.Text = t; };
-            _updateOutChart = (iIntgs, oIntgs, iLpfs, oLpfs) =>
+            _updateMps = mps => 
+            { 
+                mpsLbl.Text = mps.ToString("f1") + " Mps";
+                _mpsSeries.Points.AddY(mps);
+                //rolling X axis
+                if (_mpsSeries.Points.Count >= _horizonPoints)
+                    _mpsX.Minimum = _mpsX.Maximum - _horizonPoints;
+            };
+            _updateIntegralChart = (iIntgs, oIntgs) =>
             {
                 for (int i = 0; i < iIntgs.Count; i++)
                 {
-                    //Update integral chart
-                    UpdateChartOnePoint(iIntgs[i], oIntgs[i], integralChart);
-                    //Update LPF chart
-                    //UpdateChartOnePoint(iLpfs[i], oLpfs[i], lpfChart);
+                    float iIntg = iIntgs[i], oIntg = oIntgs[i];
+                    _intgInSeries.Points.AddY(iIntg);
+                    _intgOutSeries.Points.AddY(oIntg);
+                    _intgModulusSeries.Points.AddY(Math.Sqrt(iIntg * iIntg + oIntg * oIntg));
                 }
+                //rolling X axis
+                if (_intgInSeries.Points.Count >= _horizonPoints)
+                    _intgX.Minimum = _intgX.Maximum - _horizonPoints;
             };
 
             //Load setup from UI
@@ -106,9 +135,20 @@ namespace SerialDSP
         }
         private void DataReadLineLoop() //Data process loop running on another thread
         {
+            _sw.Start();
             while (true)
             {
                 _port.ReadLine().InPlaceSingleSplit(',', _splitBuffer);
+                _count++;
+                //SetMpsLblText(_count.ToString());
+                if (_count == 50)
+                {
+                    _sw.Stop();
+                    UpdateMps(50_000f / _sw.ElapsedMilliseconds);
+                    _sw.Reset();
+                    _count = 0;
+                    _sw.Start();
+                }
                 //integration & average
                 float inIntegral = int.Parse(_splitBuffer[0]);
                 float outIntegral = int.Parse(_splitBuffer[1]);
@@ -116,21 +156,14 @@ namespace SerialDSP
                 //Save new values to buffers
                 _inIntegrationBatch.Add(_integration.AverageInPhase);
                 _outIntegrationBatch.Add(_integration.AverageOutOfPhase);
-                //DSP LPF
-                // double inLpf = lpf.ProcessSample(inIntegral);
-                // double outLpf = lpf.ProcessSample(outIntegral);
-                // _inLPFBatch.Add((float)inLpf);
-                // _outLPFBatch.Add((float)outLpf);
                 //When it's enough for an update, do it and clear the buffer
                 if (_inIntegrationBatch.Count >= UpdateBatchSize)
                 {
                     SetPrintLblText($"{_inIntegrationBatch.Last():f4}", $"{_outIntegrationBatch.Last():f4}");
-                    UpdateChart(_inIntegrationBatch, _outIntegrationBatch, _inLPFBatch, _outLPFBatch);
+                    UpdateChart(_inIntegrationBatch, _outIntegrationBatch);
                     //Clear buffer after update to UI
                     _inIntegrationBatch.Clear();
                     _outIntegrationBatch.Clear();
-                    //_inLPFBatch.Clear();
-                    //_outLPFBatch.Clear();
                 }
             }
         }
@@ -159,6 +192,7 @@ namespace SerialDSP
                 beginBtn.BackColor = Color.FromArgb(27, 161, 226);
                 beginBtn.FlatAppearance.BorderColor = Color.FromArgb(0, 122, 204);
                 beginBtn.FlatAppearance.MouseOverBackColor = Color.FromArgb(122, 193, 255);
+                mpsLbl.Text = string.Empty;
             }
             else  //begin
             {
@@ -191,20 +225,23 @@ namespace SerialDSP
         {
             HorizontalPoints = outChartHorizonTrack.Value;
         }
-        private void OnChartMouseWheel(object sender, MouseEventArgs e)
+        private void OnIntgChartMouseWheel(object sender, MouseEventArgs e)
         {
-            Chart chart = (Chart)sender;
-            if (e.Delta < 0)
+            if (e.Delta != 0)
             {
-                double original = chart.ChartAreas[0].AxisY.Minimum;
-                chart.ChartAreas[0].AxisY.Minimum = Math.Round(original * 1.25, 1);
-                chart.ChartAreas[0].AxisY.Maximum = -chart.ChartAreas[0].AxisY.Minimum;
-            }
-            else if (e.Delta > 0)
-            {
-                double original = chart.ChartAreas[0].AxisY.Minimum;
-                chart.ChartAreas[0].AxisY.Minimum = Math.Round(original / 1.25, 1);
-                chart.ChartAreas[0].AxisY.Maximum = -chart.ChartAreas[0].AxisY.Minimum;
+                Chart chart = (Chart)sender;
+                var y = chart.ChartAreas[0].AxisY;
+                double original = y.Maximum;
+                if (e.Delta < 0 && original < 1048576)
+                {
+                    y.Maximum = Math.Round(original * 1.25, 2);
+                    y.Minimum = -y.Maximum;
+                }
+                else if (e.Delta > 0 && original > 0.06)
+                {
+                    y.Maximum = Math.Round(original / 1.25, 2);
+                    y.Minimum = -y.Maximum;
+                }
             }
         }
         private void UpdateBatchSizeChanged(object sender, EventArgs e)
@@ -213,42 +250,74 @@ namespace SerialDSP
             _inIntegrationBatch.Clear();
             _outIntegrationBatch.Clear();
         }
+        private void AAChanged(object sender, EventArgs e)
+        {
+            if (aaBox.Checked)
+            {
+                integralChart.AntiAliasing = AntiAliasingStyles.All;
+                mpsChart.AntiAliasing = AntiAliasingStyles.All;
+            }
+            else
+            {
+                integralChart.AntiAliasing = AntiAliasingStyles.Text;
+                mpsChart.AntiAliasing = AntiAliasingStyles.Text;
+            }
+        }
+        private void FastChanged(object sender, EventArgs e)
+        {
+            var type = fastBox.Checked ? SeriesChartType.FastLine : SeriesChartType.Line;
+            foreach (var series in integralChart.Series)
+            {
+                series.ChartType = type;
+            }
+            foreach (var series in mpsChart.Series)
+            {
+                series.ChartType = type;
+            }
+        }
+
 
         //Cross-thread methods
         private void SetPrintLblText(string s, string t)
         {
             if (printInPhaseLbl.InvokeRequired)
-                Invoke(_setPrintLbl, new object[] { s, t });
+            {
+                _setPrintLbl_Args[0] = s;
+                _setPrintLbl_Args[1] = t;
+                Invoke(_setPrintLbl, _setPrintLbl_Args);
+            }
             else
                 _setPrintLbl(s, t);
         }
-        private void UpdateChart(List<float> iIntg, List<float> oIntg, List<float> iLpf, List<float> oLpf)
+        private void UpdateMps(float mps)
+        {
+            if (printInPhaseLbl.InvokeRequired)
+            {
+                _updateMps_Args[0] = mps;
+                Invoke(_updateMps, _updateMps_Args);
+            }
+            else
+                _updateMps(mps);
+        }
+        private void UpdateChart(List<float> iIntgs, List<float> oIntgs)
         {
             if (integralChart.InvokeRequired)
-                Invoke(_updateOutChart, new object[] { iIntg, oIntg, iLpf, oLpf });
+            {
+                _updateIntegralChart_Args[0] = iIntgs;
+                _updateIntegralChart_Args[1] = oIntgs;
+                Invoke(_updateIntegralChart, _updateIntegralChart_Args);
+            }
             else
-                _updateOutChart(iIntg, oIntg, iLpf, oLpf);
+                _updateIntegralChart(iIntgs, oIntgs);
         }
 
         private void ClearOutChartBtn_Click(object sender, EventArgs e)
         {
-            integralChart.ChartAreas[0].AxisX.Minimum = 0;
+            _intgX.Minimum = 0;
             foreach (var serie in integralChart.Series)
             {
                 serie.Points.Clear();
             }
-        }
-
-        //Helpers
-        private void UpdateChartOnePoint(float i, float o, Chart chart)
-        {
-            var iSerie = chart.Series["In-phase"];
-            iSerie.Points.AddY(i);
-            //rolling X axis
-            if (iSerie.Points.Count >= _horizonPoints)
-                chart.ChartAreas[0].AxisX.Minimum = chart.ChartAreas[0].AxisX.Maximum - _horizonPoints;
-            chart.Series["Out-of-phase"].Points.AddY(o);
-            chart.Series["Modulus"].Points.AddY(Math.Sqrt(i * i + o * o));
         }
 
         [Obsolete]
@@ -270,5 +339,6 @@ namespace SerialDSP
                 return false;
             }
         }
+
     }
 }
