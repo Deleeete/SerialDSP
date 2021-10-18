@@ -21,18 +21,18 @@ namespace SerialDSP
 
         private readonly Regex _dataPat = new Regex(@"(-?\d+),(-?\d+)");
         private readonly SerialPort _port = new SerialPort();
-        private readonly OnlineFilter lpf = OnlineFilter.CreateLowpass(ImpulseResponse.Finite, 250, 25);
+        // private readonly OnlineFilter lpf = OnlineFilter.CreateLowpass(ImpulseResponse.Finite, 250, 1);
         //delegate for other threads to invoke
         private readonly Action<string, string> _setPrintLbl;
-        private readonly Action<List<float>, List<float>> _updateOutChart;
+        private readonly Action<List<float>, List<float>, List<float>, List<float>> _updateOutChart;
         private bool _hasBegin = false;
-        //Signals to control IO event handler
-        private volatile bool _needClose = false;
         //Chart scaling
         private int _horizonPoints;
         //Chart update batches
-        private readonly List<float> _inDataBatch = new List<float>();
-        private readonly List<float> _outDataBatch = new List<float>();
+        private readonly List<float> _inIntegrationBatch = new List<float>();
+        private readonly List<float> _outIntegrationBatch = new List<float>();
+        private readonly List<float> _inLPFBatch = new List<float>();
+        private readonly List<float> _outLPFBatch = new List<float>();
         //Integration wrapper
         private readonly Integration _integration = new Integration();
         //Data fetch&processing loop
@@ -59,27 +59,26 @@ namespace SerialDSP
             _port.StopBits = StopBits.One;
             _port.Handshake = Handshake.None;
             _port.Parity = Parity.None;
-            //manually-bind event handler
-            outChart.MouseWheel += OutChartMouseWheel;
             LoadAvailablePorts(false);
+
+            //manually-bind event handler
+            integralChart.MouseWheel += OnChartMouseWheel;
+            integralChart.ChartAreas[0].AxisX.Interval = 256;
+            lpfChart.MouseWheel += OnChartMouseWheel;
+
+            //import delegates
             _setPrintLbl = (s, t) => { printInPhaseLbl.Text = s; printOutPhaseLbl.Text = t; };
-            var axisx = outChart.ChartAreas[0].AxisX;
-            axisx.MajorGrid.LineColor = Color.FromArgb(41, 111, 112);
-            _updateOutChart = (ins, outs) =>
+            _updateOutChart = (iIntgs, oIntgs, iLpfs, oLpfs) =>
             {
-                for (int i = 0; i < ins.Count; i++)
+                for (int i = 0; i < iIntgs.Count; i++)
                 {
-                    float inValue = ins[i];
-                    float outValue = outs[i];
-                    var inps = outChart.Series["In-phase"];
-                    inps.Points.AddY(inValue);
-                    //rolling X axis
-                    if (inps.Points.Count >= _horizonPoints)
-                        outChart.ChartAreas[0].AxisX.Minimum = outChart.ChartAreas[0].AxisX.Maximum - _horizonPoints;
-                    outChart.Series["Out-of-phase"].Points.AddY(outValue);
-                    outChart.Series["Modulus"].Points.AddY(Math.Sqrt(inValue * inValue + outValue * outValue));
+                    //Update integral chart
+                    UpdateChartOnePoint(iIntgs[i], oIntgs[i], integralChart);
+                    //Update LPF chart
+                    //UpdateChartOnePoint(iLpfs[i], oLpfs[i], lpfChart);
                 }
             };
+
             //Load setup from UI
             WindowTrackScroll(null, null);    //fire windowTrackbar ValueChanged event manually
             HorizontalPoints = outChartHorizonTrack.Value;
@@ -110,20 +109,28 @@ namespace SerialDSP
             while (true)
             {
                 _port.ReadLine().InPlaceSingleSplit(',', _splitBuffer);
-                float inPhase = int.Parse(_splitBuffer[0]);
-                float outOfPhase = int.Parse(_splitBuffer[1]);
-                _integration.Roll(inPhase, outOfPhase);
+                //integration & average
+                float inIntegral = int.Parse(_splitBuffer[0]);
+                float outIntegral = int.Parse(_splitBuffer[1]);
+                _integration.Roll(inIntegral, outIntegral);
                 //Save new values to buffers
-                _inDataBatch.Add(_integration.AverageInPhase);
-                _outDataBatch.Add(_integration.AverageOutOfPhase);
+                _inIntegrationBatch.Add(_integration.AverageInPhase);
+                _outIntegrationBatch.Add(_integration.AverageOutOfPhase);
+                //DSP LPF
+                // double inLpf = lpf.ProcessSample(inIntegral);
+                // double outLpf = lpf.ProcessSample(outIntegral);
+                // _inLPFBatch.Add((float)inLpf);
+                // _outLPFBatch.Add((float)outLpf);
                 //When it's enough for an update, do it and clear the buffer
-                if (_inDataBatch.Count >= UpdateBatchSize)
+                if (_inIntegrationBatch.Count >= UpdateBatchSize)
                 {
-                    SetPrintLblText($"{_inDataBatch.Last():f4}", $"{_outDataBatch.Last():f4}");
-                    UpdateChart(_inDataBatch, _outDataBatch);
+                    SetPrintLblText($"{_inIntegrationBatch.Last():f4}", $"{_outIntegrationBatch.Last():f4}");
+                    UpdateChart(_inIntegrationBatch, _outIntegrationBatch, _inLPFBatch, _outLPFBatch);
                     //Clear buffer after update to UI
-                    _inDataBatch.Clear();
-                    _outDataBatch.Clear();
+                    _inIntegrationBatch.Clear();
+                    _outIntegrationBatch.Clear();
+                    //_inLPFBatch.Clear();
+                    //_outLPFBatch.Clear();
                 }
             }
         }
@@ -184,26 +191,27 @@ namespace SerialDSP
         {
             HorizontalPoints = outChartHorizonTrack.Value;
         }
-        private void OutChartMouseWheel(object sender, MouseEventArgs e)
+        private void OnChartMouseWheel(object sender, MouseEventArgs e)
         {
+            Chart chart = (Chart)sender;
             if (e.Delta < 0)
             {
-                double original = outChart.ChartAreas[0].AxisY.Minimum;
-                outChart.ChartAreas[0].AxisY.Minimum = Math.Round(original * 1.25, 1);
-                outChart.ChartAreas[0].AxisY.Maximum = -outChart.ChartAreas[0].AxisY.Minimum;
+                double original = chart.ChartAreas[0].AxisY.Minimum;
+                chart.ChartAreas[0].AxisY.Minimum = Math.Round(original * 1.25, 1);
+                chart.ChartAreas[0].AxisY.Maximum = -chart.ChartAreas[0].AxisY.Minimum;
             }
             else if (e.Delta > 0)
             {
-                double original = outChart.ChartAreas[0].AxisY.Minimum;
-                outChart.ChartAreas[0].AxisY.Minimum = Math.Round(original / 1.25, 1);
-                outChart.ChartAreas[0].AxisY.Maximum = -outChart.ChartAreas[0].AxisY.Minimum;
+                double original = chart.ChartAreas[0].AxisY.Minimum;
+                chart.ChartAreas[0].AxisY.Minimum = Math.Round(original / 1.25, 1);
+                chart.ChartAreas[0].AxisY.Maximum = -chart.ChartAreas[0].AxisY.Minimum;
             }
         }
         private void UpdateBatchSizeChanged(object sender, EventArgs e)
         {
             UpdateBatchSize = (int)updateBatchSizeBox.Value;
-            _inDataBatch.Clear();
-            _outDataBatch.Clear();
+            _inIntegrationBatch.Clear();
+            _outIntegrationBatch.Clear();
         }
 
         //Cross-thread methods
@@ -214,24 +222,39 @@ namespace SerialDSP
             else
                 _setPrintLbl(s, t);
         }
-        private void UpdateChart(List<float> ip, List<float> op)
+        private void UpdateChart(List<float> iIntg, List<float> oIntg, List<float> iLpf, List<float> oLpf)
         {
-            if (outChart.InvokeRequired)
-                Invoke(_updateOutChart, new object[] { ip, op });
+            if (integralChart.InvokeRequired)
+                Invoke(_updateOutChart, new object[] { iIntg, oIntg, iLpf, oLpf });
             else
-                _updateOutChart(ip, op);
+                _updateOutChart(iIntg, oIntg, iLpf, oLpf);
         }
 
         private void ClearOutChartBtn_Click(object sender, EventArgs e)
         {
-            outChart.ChartAreas[0].AxisX.Minimum = 0;
-            foreach (var serie in outChart.Series)
+            integralChart.ChartAreas[0].AxisX.Minimum = 0;
+            foreach (var serie in integralChart.Series)
             {
                 serie.Points.Clear();
             }
         }
 
+        //Helpers
+        private void UpdateChartOnePoint(float i, float o, Chart chart)
+        {
+            var iSerie = chart.Series["In-phase"];
+            iSerie.Points.AddY(i);
+            //rolling X axis
+            if (iSerie.Points.Count >= _horizonPoints)
+                chart.ChartAreas[0].AxisX.Minimum = chart.ChartAreas[0].AxisX.Maximum - _horizonPoints;
+            chart.Series["Out-of-phase"].Points.AddY(o);
+            chart.Series["Modulus"].Points.AddY(Math.Sqrt(i * i + o * o));
+        }
+
+        [Obsolete]
+#pragma warning disable IDE0051 
         private bool ParseRegex(string s, out float inPhase, out float outOfPhase)
+#pragma warning restore IDE0051 // 删除未使用的私有成员
         {
             if (_dataPat.IsMatch(s))
             {

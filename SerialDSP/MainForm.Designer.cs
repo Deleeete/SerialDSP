@@ -29,11 +29,16 @@ namespace SerialDSP
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea3 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend3 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series7 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.Series series8 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.Series series9 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.Series series3 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series4 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.Series series5 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.Series series6 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.portCombo = new System.Windows.Forms.ComboBox();
             this.label1 = new System.Windows.Forms.Label();
             this.refreshPortBtn = new System.Windows.Forms.Button();
@@ -51,11 +56,12 @@ namespace SerialDSP
             this.label5 = new System.Windows.Forms.Label();
             this.label6 = new System.Windows.Forms.Label();
             this.printOutPhaseLbl = new System.Windows.Forms.Label();
-            this.outChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
+            this.integralChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.tabControl1 = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.clearOutChartBtn = new System.Windows.Forms.Button();
             this.tabPage2 = new System.Windows.Forms.TabPage();
+            this.lpfChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.groupBox3 = new System.Windows.Forms.GroupBox();
             this.label8 = new System.Windows.Forms.Label();
             this.updateBatchSizeBox = new System.Windows.Forms.NumericUpDown();
@@ -67,9 +73,11 @@ namespace SerialDSP
             ((System.ComponentModel.ISupportInitialize)(this.readBufferNumericBox)).BeginInit();
             this.groupBox2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.windowTrackbar)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.outChart)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.integralChart)).BeginInit();
             this.tabControl1.SuspendLayout();
             this.tabPage1.SuspendLayout();
+            this.tabPage2.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.lpfChart)).BeginInit();
             this.groupBox3.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.updateBatchSizeBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.outChartHorizonTrack)).BeginInit();
@@ -217,7 +225,7 @@ namespace SerialDSP
             this.windowLbl.AutoSize = true;
             this.windowLbl.Font = new System.Drawing.Font("Consolas", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.windowLbl.ForeColor = System.Drawing.Color.Black;
-            this.windowLbl.Location = new System.Drawing.Point(377, 23);
+            this.windowLbl.Location = new System.Drawing.Point(214, 25);
             this.windowLbl.Name = "windowLbl";
             this.windowLbl.Size = new System.Drawing.Size(18, 19);
             this.windowLbl.TabIndex = 9;
@@ -237,13 +245,13 @@ namespace SerialDSP
             // windowTrackbar
             // 
             this.windowTrackbar.Location = new System.Drawing.Point(15, 47);
-            this.windowTrackbar.Maximum = 4096;
+            this.windowTrackbar.Maximum = 8192;
             this.windowTrackbar.Minimum = 16;
             this.windowTrackbar.Name = "windowTrackbar";
-            this.windowTrackbar.Size = new System.Drawing.Size(388, 45);
+            this.windowTrackbar.Size = new System.Drawing.Size(238, 45);
             this.windowTrackbar.TabIndex = 7;
             this.windowTrackbar.TickFrequency = 128;
-            this.windowTrackbar.Value = 64;
+            this.windowTrackbar.Value = 1024;
             this.windowTrackbar.Scroll += new System.EventHandler(this.WindowTrackScroll);
             // 
             // beginBtn
@@ -305,50 +313,50 @@ namespace SerialDSP
             this.printOutPhaseLbl.TabIndex = 12;
             this.printOutPhaseLbl.Text = "/";
             // 
-            // outChart
+            // integralChart
             // 
-            this.outChart.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(243)))), ((int)(((byte)(243)))), ((int)(((byte)(246)))));
-            this.outChart.BackHatchStyle = System.Windows.Forms.DataVisualization.Charting.ChartHatchStyle.BackwardDiagonal;
-            chartArea3.AxisX.LineColor = System.Drawing.Color.DimGray;
-            chartArea3.AxisY.LineColor = System.Drawing.Color.DimGray;
-            chartArea3.AxisY.ScaleBreakStyle.LineColor = System.Drawing.Color.DarkGray;
-            chartArea3.Name = "ChartArea1";
-            this.outChart.ChartAreas.Add(chartArea3);
-            this.outChart.Cursor = System.Windows.Forms.Cursors.Cross;
-            this.outChart.Dock = System.Windows.Forms.DockStyle.Fill;
-            legend3.Docking = System.Windows.Forms.DataVisualization.Charting.Docking.Bottom;
-            legend3.Name = "Legend1";
-            this.outChart.Legends.Add(legend3);
-            this.outChart.Location = new System.Drawing.Point(3, 3);
-            this.outChart.Name = "outChart";
-            this.outChart.Palette = System.Windows.Forms.DataVisualization.Charting.ChartColorPalette.SemiTransparent;
-            series7.BorderWidth = 2;
-            series7.ChartArea = "ChartArea1";
-            series7.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
-            series7.Color = System.Drawing.Color.Crimson;
-            series7.LabelAngle = 3;
-            series7.Legend = "Legend1";
-            series7.MarkerColor = System.Drawing.Color.Blue;
-            series7.Name = "In-phase";
-            series7.XValueType = System.Windows.Forms.DataVisualization.Charting.ChartValueType.Int32;
-            series8.BorderWidth = 2;
-            series8.ChartArea = "ChartArea1";
-            series8.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
-            series8.Color = System.Drawing.Color.LightSeaGreen;
-            series8.Legend = "Legend1";
-            series8.MarkerColor = System.Drawing.Color.Red;
-            series8.Name = "Out-of-phase";
-            series8.XValueType = System.Windows.Forms.DataVisualization.Charting.ChartValueType.Int32;
-            series9.ChartArea = "ChartArea1";
-            series9.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
-            series9.Color = System.Drawing.Color.DarkMagenta;
-            series9.Legend = "Legend1";
-            series9.Name = "Modulus";
-            this.outChart.Series.Add(series7);
-            this.outChart.Series.Add(series8);
-            this.outChart.Series.Add(series9);
-            this.outChart.Size = new System.Drawing.Size(575, 523);
-            this.outChart.TabIndex = 14;
+            this.integralChart.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(243)))), ((int)(((byte)(243)))), ((int)(((byte)(246)))));
+            this.integralChart.BackHatchStyle = System.Windows.Forms.DataVisualization.Charting.ChartHatchStyle.BackwardDiagonal;
+            chartArea1.AxisX.LineColor = System.Drawing.Color.DimGray;
+            chartArea1.AxisY.LineColor = System.Drawing.Color.DimGray;
+            chartArea1.AxisY.ScaleBreakStyle.LineColor = System.Drawing.Color.DarkGray;
+            chartArea1.Name = "ChartArea1";
+            this.integralChart.ChartAreas.Add(chartArea1);
+            this.integralChart.Cursor = System.Windows.Forms.Cursors.Cross;
+            this.integralChart.Dock = System.Windows.Forms.DockStyle.Fill;
+            legend1.Docking = System.Windows.Forms.DataVisualization.Charting.Docking.Bottom;
+            legend1.Name = "Legend1";
+            this.integralChart.Legends.Add(legend1);
+            this.integralChart.Location = new System.Drawing.Point(3, 3);
+            this.integralChart.Name = "integralChart";
+            this.integralChart.Palette = System.Windows.Forms.DataVisualization.Charting.ChartColorPalette.SemiTransparent;
+            series1.BorderWidth = 2;
+            series1.ChartArea = "ChartArea1";
+            series1.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
+            series1.Color = System.Drawing.Color.Crimson;
+            series1.LabelAngle = 3;
+            series1.Legend = "Legend1";
+            series1.MarkerColor = System.Drawing.Color.Blue;
+            series1.Name = "In-phase";
+            series1.XValueType = System.Windows.Forms.DataVisualization.Charting.ChartValueType.Int32;
+            series2.BorderWidth = 2;
+            series2.ChartArea = "ChartArea1";
+            series2.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
+            series2.Color = System.Drawing.Color.LightSeaGreen;
+            series2.Legend = "Legend1";
+            series2.MarkerColor = System.Drawing.Color.Red;
+            series2.Name = "Out-of-phase";
+            series2.XValueType = System.Windows.Forms.DataVisualization.Charting.ChartValueType.Int32;
+            series3.ChartArea = "ChartArea1";
+            series3.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
+            series3.Color = System.Drawing.Color.DarkMagenta;
+            series3.Legend = "Legend1";
+            series3.Name = "Modulus";
+            this.integralChart.Series.Add(series1);
+            this.integralChart.Series.Add(series2);
+            this.integralChart.Series.Add(series3);
+            this.integralChart.Size = new System.Drawing.Size(575, 523);
+            this.integralChart.TabIndex = 14;
             // 
             // tabControl1
             // 
@@ -367,13 +375,13 @@ namespace SerialDSP
             // 
             this.tabPage1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(243)))), ((int)(((byte)(243)))), ((int)(((byte)(246)))));
             this.tabPage1.Controls.Add(this.clearOutChartBtn);
-            this.tabPage1.Controls.Add(this.outChart);
+            this.tabPage1.Controls.Add(this.integralChart);
             this.tabPage1.Location = new System.Drawing.Point(4, 26);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
             this.tabPage1.Size = new System.Drawing.Size(581, 529);
             this.tabPage1.TabIndex = 0;
-            this.tabPage1.Text = "Outputs";
+            this.tabPage1.Text = "Integral";
             // 
             // clearOutChartBtn
             // 
@@ -391,13 +399,59 @@ namespace SerialDSP
             // 
             // tabPage2
             // 
+            this.tabPage2.Controls.Add(this.lpfChart);
             this.tabPage2.Location = new System.Drawing.Point(4, 26);
             this.tabPage2.Name = "tabPage2";
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
             this.tabPage2.Size = new System.Drawing.Size(581, 529);
             this.tabPage2.TabIndex = 1;
-            this.tabPage2.Text = "FFT";
+            this.tabPage2.Text = "LPF";
             this.tabPage2.UseVisualStyleBackColor = true;
+            // 
+            // lpfChart
+            // 
+            this.lpfChart.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(243)))), ((int)(((byte)(243)))), ((int)(((byte)(246)))));
+            this.lpfChart.BackHatchStyle = System.Windows.Forms.DataVisualization.Charting.ChartHatchStyle.BackwardDiagonal;
+            chartArea2.AxisX.LineColor = System.Drawing.Color.DimGray;
+            chartArea2.AxisY.LineColor = System.Drawing.Color.DimGray;
+            chartArea2.AxisY.ScaleBreakStyle.LineColor = System.Drawing.Color.DarkGray;
+            chartArea2.Name = "ChartArea1";
+            this.lpfChart.ChartAreas.Add(chartArea2);
+            this.lpfChart.Cursor = System.Windows.Forms.Cursors.Cross;
+            this.lpfChart.Dock = System.Windows.Forms.DockStyle.Fill;
+            legend2.Docking = System.Windows.Forms.DataVisualization.Charting.Docking.Bottom;
+            legend2.Name = "Legend1";
+            this.lpfChart.Legends.Add(legend2);
+            this.lpfChart.Location = new System.Drawing.Point(3, 3);
+            this.lpfChart.Name = "lpfChart";
+            this.lpfChart.Palette = System.Windows.Forms.DataVisualization.Charting.ChartColorPalette.SemiTransparent;
+            series4.BorderWidth = 2;
+            series4.ChartArea = "ChartArea1";
+            series4.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
+            series4.Color = System.Drawing.Color.Crimson;
+            series4.LabelAngle = 3;
+            series4.Legend = "Legend1";
+            series4.MarkerColor = System.Drawing.Color.Blue;
+            series4.Name = "In-phase";
+            series4.XValueType = System.Windows.Forms.DataVisualization.Charting.ChartValueType.Int32;
+            series5.BorderWidth = 2;
+            series5.ChartArea = "ChartArea1";
+            series5.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
+            series5.Color = System.Drawing.Color.LightSeaGreen;
+            series5.Legend = "Legend1";
+            series5.MarkerColor = System.Drawing.Color.Red;
+            series5.Name = "Out-of-phase";
+            series5.XValueType = System.Windows.Forms.DataVisualization.Charting.ChartValueType.Int32;
+            series6.ChartArea = "ChartArea1";
+            series6.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
+            series6.Color = System.Drawing.Color.DarkMagenta;
+            series6.Legend = "Legend1";
+            series6.Name = "Modulus";
+            this.lpfChart.Series.Add(series4);
+            this.lpfChart.Series.Add(series5);
+            this.lpfChart.Series.Add(series6);
+            this.lpfChart.Size = new System.Drawing.Size(575, 523);
+            this.lpfChart.TabIndex = 15;
             // 
             // groupBox3
             // 
@@ -444,7 +498,7 @@ namespace SerialDSP
             this.updateBatchSizeBox.Size = new System.Drawing.Size(74, 24);
             this.updateBatchSizeBox.TabIndex = 7;
             this.updateBatchSizeBox.Value = new decimal(new int[] {
-            16,
+            32,
             0,
             0,
             0});
@@ -465,13 +519,13 @@ namespace SerialDSP
             // outChartHorizonTrack
             // 
             this.outChartHorizonTrack.Location = new System.Drawing.Point(19, 49);
-            this.outChartHorizonTrack.Maximum = 1024;
+            this.outChartHorizonTrack.Maximum = 4096;
             this.outChartHorizonTrack.Minimum = 16;
             this.outChartHorizonTrack.Name = "outChartHorizonTrack";
             this.outChartHorizonTrack.Size = new System.Drawing.Size(147, 45);
             this.outChartHorizonTrack.TabIndex = 7;
             this.outChartHorizonTrack.TickFrequency = 128;
-            this.outChartHorizonTrack.Value = 256;
+            this.outChartHorizonTrack.Value = 1024;
             this.outChartHorizonTrack.Scroll += new System.EventHandler(this.OutChartHorizonTrackerScroll);
             // 
             // label9
@@ -514,9 +568,11 @@ namespace SerialDSP
             this.groupBox2.ResumeLayout(false);
             this.groupBox2.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.windowTrackbar)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.outChart)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.integralChart)).EndInit();
             this.tabControl1.ResumeLayout(false);
             this.tabPage1.ResumeLayout(false);
+            this.tabPage2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.lpfChart)).EndInit();
             this.groupBox3.ResumeLayout(false);
             this.groupBox3.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.updateBatchSizeBox)).EndInit();
@@ -543,7 +599,7 @@ namespace SerialDSP
         private System.Windows.Forms.Label label5;
         private System.Windows.Forms.Label label6;
         private System.Windows.Forms.Label printOutPhaseLbl;
-        private System.Windows.Forms.DataVisualization.Charting.Chart outChart;
+        private System.Windows.Forms.DataVisualization.Charting.Chart integralChart;
         private System.Windows.Forms.TabControl tabControl1;
         private System.Windows.Forms.TabPage tabPage1;
         private System.Windows.Forms.TabPage tabPage2;
@@ -556,6 +612,7 @@ namespace SerialDSP
         private System.Windows.Forms.NumericUpDown readBufferNumericBox;
         private System.Windows.Forms.Label label8;
         private System.Windows.Forms.NumericUpDown updateBatchSizeBox;
+        private System.Windows.Forms.DataVisualization.Charting.Chart lpfChart;
     }
 }
 

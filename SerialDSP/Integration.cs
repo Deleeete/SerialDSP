@@ -4,6 +4,7 @@ namespace SerialDSP
 {
     public class Integration
     {
+        private readonly object _lockObj = new object();
         private readonly Queue<float> _bufferIn = new Queue<float>();
         private readonly Queue<float> _bufferOut = new Queue<float>();
         private int _size;
@@ -18,8 +19,11 @@ namespace SerialDSP
             get => _size;
             set
             {
-                _size = value;
-                Reset();    //reset queue after size changed
+                lock (_lockObj)
+                {
+                    _size = value;
+                    Reset();    //reset queue after size changed
+                }
             }
         }
         /// <summary>
@@ -53,24 +57,30 @@ namespace SerialDSP
         /// <param name="valueInPhase">The next value</param>
         public void Roll(float valueInPhase, float valueOutOfPhase)
         {
-            _bufferIn.Enqueue(valueInPhase);
-            _bufferOut.Enqueue(valueOutOfPhase);
-            _sumIn = _sumIn + valueInPhase - _bufferIn.Dequeue();
-            _sumOut = _sumOut + valueOutOfPhase - _bufferOut.Dequeue();
+            lock (_lockObj)
+            {
+                _bufferIn.Enqueue(valueInPhase);
+                _sumIn = _sumIn + valueInPhase - _bufferIn.Dequeue();
+                _bufferOut.Enqueue(valueOutOfPhase);
+                _sumOut = _sumOut + valueOutOfPhase - _bufferOut.Dequeue();
+            }
         }
         /// <summary>
         /// Fill window with zeros
         /// </summary>
         public void Reset()
         {
-            _bufferIn.Clear();
-            _bufferOut.Clear();
-            for (int i = 0; i < _size; i++)
+            lock (_lockObj)
             {
-                _bufferIn.Enqueue(0f);
-                _bufferOut.Enqueue(0f);
+                _bufferIn.Clear();
+                _bufferOut.Clear();
+                for (int i = 0; i < _size; i++)
+                {
+                    _bufferIn.Enqueue(0f);
+                    _bufferOut.Enqueue(0f);
+                }
+                _sumIn = _sumOut = 0f;
             }
-            _sumIn = _sumOut = 0f;
         }
     }
 }
