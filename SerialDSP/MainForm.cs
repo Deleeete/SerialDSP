@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO.Ports;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
@@ -19,6 +20,7 @@ namespace SerialDSP
         //pre-saved vars
         private readonly Regex _dataPat = new Regex(@"(-?\d+),(-?\d+)");
         private readonly SerialPort _port = new SerialPort();
+        private readonly StringBuilder _sb = new StringBuilder();
 #pragma warning disable IDE0052 
         private readonly Axis _intgY, _intgX, _mpsX, _mpsY;
 #pragma warning restore IDE0052
@@ -27,8 +29,6 @@ namespace SerialDSP
         private readonly Series _intgModulusSeries;
         private readonly Series _mpsSeries;
 
-
-        // private readonly OnlineFilter lpf = OnlineFilter.CreateLowpass(ImpulseResponse.Finite, 250, 1);
         //delegate for other threads to invoke and corresponding argument arrays that minimize heap alloc and hence GC
         private readonly Action<string, string> _setPrintLbl;
         private readonly object[] _setPrintLbl_Args = new object[2]; 
@@ -89,13 +89,14 @@ namespace SerialDSP
             //import delegates
             _setPrintLbl = (s, t) => { printInPhaseLbl.Text = s; printOutPhaseLbl.Text = t; };
             _updateMps = mps => 
-            { 
-                mpsLbl.Text = mps.ToString("f1") + " Mps";
+            {
+                _sb.Append(mps);
+                mpsLbl.Text = _sb.ToString() + " Mps";
+                _sb.Clear();
                 _mpsSeries.Points.AddY(mps);
+                _mpsSeries.Points.RemoveAt(0);
                 //rolling X axis
-                if (_mpsSeries.Points.Count >= MaxDrawPoints)
-                    _mpsSeries.Points.Clear();
-                else if (_mpsSeries.Points.Count >= _horizonPoints)
+                if (_mpsSeries.Points.Count >= _horizonPoints)
                     _mpsX.Minimum = _mpsX.Maximum - _horizonPoints;
             };
             _updateIntegralChart = (iIntgs, oIntgs) =>
@@ -158,11 +159,10 @@ namespace SerialDSP
             {
                 _port.ReadLine().InPlaceSingleSplit(',', _splitBuffer);
                 _count++;
-                //SetMpsLblText(_count.ToString());
-                if (_count == 50)
+                if (_count == 100)
                 {
                     _sw.Stop();
-                    UpdateMps(50_000f / _sw.ElapsedMilliseconds);
+                    UpdateMps(100_000f / _sw.ElapsedMilliseconds);
                     SetPrintLblText($"{_inIntegrationBatch.Last():f4}", $"{_outIntegrationBatch.Last():f4}");
                     _sw.Reset();
                     _count = 0;

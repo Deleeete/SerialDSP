@@ -414,6 +414,7 @@ namespace SerialDSP
             // 
             // mpsChart
             // 
+            this.mpsChart.AntiAliasing = System.Windows.Forms.DataVisualization.Charting.AntiAliasingStyles.Text;
             this.mpsChart.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(243)))), ((int)(((byte)(243)))), ((int)(((byte)(246)))));
             this.mpsChart.BackHatchStyle = System.Windows.Forms.DataVisualization.Charting.ChartHatchStyle.BackwardDiagonal;
             chartArea4.AxisX.LineColor = System.Drawing.Color.DimGray;
@@ -430,7 +431,7 @@ namespace SerialDSP
             this.mpsChart.Name = "mpsChart";
             this.mpsChart.Palette = System.Windows.Forms.DataVisualization.Charting.ChartColorPalette.SemiTransparent;
             series8.ChartArea = "ChartArea1";
-            series8.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Spline;
+            series8.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.FastLine;
             series8.Color = System.Drawing.Color.DodgerBlue;
             series8.Legend = "Legend1";
             series8.Name = "Mps";
@@ -532,12 +533,12 @@ namespace SerialDSP
             this.horizonPointsLbl.Text = "/";
             this.horizonPointsLbl.TextAlign = System.Drawing.ContentAlignment.TopRight;
             // 
-            // outChartHorizonTrack
+            // chartHorizonTrack
             // 
             this.chartHorizonTrack.Location = new System.Drawing.Point(19, 49);
             this.chartHorizonTrack.Maximum = 4096;
             this.chartHorizonTrack.Minimum = 16;
-            this.chartHorizonTrack.Name = "outChartHorizonTrack";
+            this.chartHorizonTrack.Name = "chartHorizonTrack";
             this.chartHorizonTrack.Size = new System.Drawing.Size(147, 45);
             this.chartHorizonTrack.TabIndex = 7;
             this.chartHorizonTrack.TickFrequency = 128;
@@ -560,7 +561,7 @@ namespace SerialDSP
             this.mpsLbl.Font = new System.Drawing.Font("Consolas", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.mpsLbl.Location = new System.Drawing.Point(2, 553);
             this.mpsLbl.Name = "mpsLbl";
-            this.mpsLbl.Size = new System.Drawing.Size(103, 22);
+            this.mpsLbl.Size = new System.Drawing.Size(181, 22);
             this.mpsLbl.TabIndex = 16;
             this.mpsLbl.Text = "/";
             // 
