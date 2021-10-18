@@ -122,13 +122,7 @@ namespace SerialDSP
             UpdateBatchSize = (int)updateBatchSizeBox.Value;
 
             //init charts with zeros
-            for (int i = 0; i < chartHorizonTrack.Maximum; i++)
-            {
-                _mpsSeries.Points.AddY(0);
-                _intgInSeries.Points.AddY(0);
-                _intgOutSeries.Points.AddY(0);
-                _intgModulusSeries.Points.AddY(0);
-            }
+            InitCharts();
             _intgY.Minimum = -1024;
             _intgY.Maximum = 1024;
         }
@@ -294,7 +288,6 @@ namespace SerialDSP
             }
         }
 
-
         //Cross-thread methods
         private void SetPrintLblText(string s, string t)
         {
@@ -336,12 +329,29 @@ namespace SerialDSP
                 _updateIntegralChart(iIntgs, oIntgs);
         }
 
-        private void ClearOutChartBtn_Click(object sender, EventArgs e)
+        private void ClearChartBtn_Click(object sender, EventArgs e)
         {
             _intgX.Minimum = 0;
-            foreach (var serie in integralChart.Series)
+            foreach (var series in integralChart.Series)
+                series.Points.Clear();
+            for (int i = 0; i < chartHorizonTrack.Maximum; i++)
             {
-                serie.Points.Clear();
+                foreach (var series in integralChart.Series)
+                    series.Points.AddY(0);
+            }
+        }
+
+        //Helpers
+        private void InitCharts()
+        {
+            _mpsSeries.Points.Clear();
+            foreach (var series in integralChart.Series)
+                series.Points.Clear();
+            for (int i = 0; i < chartHorizonTrack.Maximum; i++)
+            {
+                _mpsSeries.Points.AddY(0);
+                foreach (var series in integralChart.Series)
+                    series.Points.AddY(0);
             }
         }
 

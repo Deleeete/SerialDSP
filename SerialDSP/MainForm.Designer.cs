@@ -399,7 +399,7 @@ namespace SerialDSP
             this.clearOutChartBtn.TabIndex = 5;
             this.clearOutChartBtn.Text = "Clear";
             this.clearOutChartBtn.UseVisualStyleBackColor = true;
-            this.clearOutChartBtn.Click += new System.EventHandler(this.ClearOutChartBtn_Click);
+            this.clearOutChartBtn.Click += new System.EventHandler(this.ClearChartBtn_Click);
             // 
             // tabPage2
             // 
