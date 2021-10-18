@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using MathNet.Filtering;
@@ -16,7 +18,7 @@ namespace SerialDSP
 {
     public partial class MainForm : Form
     {
-        
+
         private readonly Regex _dataPat = new Regex(@"(-?\d+),(-?\d+)");
         private readonly SerialPort _port = new SerialPort();
         private readonly OnlineFilter lpf = OnlineFilter.CreateLowpass(ImpulseResponse.Finite, 250, 25);
@@ -33,11 +35,15 @@ namespace SerialDSP
         private readonly List<float> _outDataBatch = new List<float>();
         //Integration wrapper
         private readonly Integration _integration = new Integration();
+        //Data fetch&processing loop
+        private Thread _dataLoopThread;
+        //string[] for in-place split
+        private readonly string[] _splitBuffer = new string[2];
 
         public int HorizontalPoints
         {
             get => _horizonPoints;
-            set 
+            set
             {
                 _horizonPoints = value;
                 horizonPointsLbl.Text = _horizonPoints.ToString();
@@ -48,13 +54,18 @@ namespace SerialDSP
         public MainForm()
         {
             InitializeComponent();
+            //Serial port setup
+            _port.DataBits = 8;
+            _port.StopBits = StopBits.One;
+            _port.Handshake = Handshake.None;
+            _port.Parity = Parity.None;
             //manually-bind event handler
             outChart.MouseWheel += OutChartMouseWheel;
             LoadAvailablePorts(false);
             _setPrintLbl = (s, t) => { printInPhaseLbl.Text = s; printOutPhaseLbl.Text = t; };
             var axisx = outChart.ChartAreas[0].AxisX;
             axisx.MajorGrid.LineColor = Color.FromArgb(41, 111, 112);
-            _updateOutChart = (ins, outs) => 
+            _updateOutChart = (ins, outs) =>
             {
                 for (int i = 0; i < ins.Count; i++)
                 {
@@ -68,9 +79,6 @@ namespace SerialDSP
                     outChart.Series["Out-of-phase"].Points.AddY(outValue);
                     outChart.Series["Modulus"].Points.AddY(Math.Sqrt(inValue * inValue + outValue * outValue));
                 }
-                //Clear buffer after update to UI
-                ins.Clear();
-                outs.Clear();
             };
             //Load setup from UI
             WindowTrackScroll(null, null);    //fire windowTrackbar ValueChanged event manually
@@ -97,48 +105,26 @@ namespace SerialDSP
             int value = (int)readBufferNumericBox.Value;
             _port.ReadBufferSize = value;
         }
-        private void DataReceived(object sender, SerialDataReceivedEventArgs e)
+        private void DataReadLineLoop() //Data process loop running on another thread
         {
-            try
+            while (true)
             {
-                string s = _port.ReadLine().Trim();
-                if (_dataPat.IsMatch(s))
+                _port.ReadLine().InPlaceSingleSplit(',', _splitBuffer);
+                float inPhase = int.Parse(_splitBuffer[0]);
+                float outOfPhase = int.Parse(_splitBuffer[1]);
+                _integration.Roll(inPhase, outOfPhase);
+                //Save new values to buffers
+                _inDataBatch.Add(_integration.AverageInPhase);
+                _outDataBatch.Add(_integration.AverageOutOfPhase);
+                //When it's enough for an update, do it and clear the buffer
+                if (_inDataBatch.Count >= UpdateBatchSize)
                 {
-                    var groups = _dataPat.Match(s).Groups;
-                    float inPhase = int.Parse(groups[1].Value);
-                    float outOfPhase = int.Parse(groups[2].Value);
-                    _integration.Roll(inPhase, outOfPhase);
-                    //Save new values to buffers
-                    _inDataBatch.Add(_integration.AverageInPhase);
-                    _outDataBatch.Add(_integration.AverageOutOfPhase);
-                    //When it's enough for an update, do it and clear the buffer
-                    if (_inDataBatch.Count >= UpdateBatchSize)
-                    {
-                        SetPrintLblText($"{_inDataBatch.Last():f4}", $"{_outDataBatch.Last():f4}");
-                        UpdateChart(_inDataBatch, _outDataBatch);
-                    }
-                    //Close port in handler and hence the IO thread so that it can be close before any other envents are fired
-                    if (_needClose)
-                    {
-                        try
-                        {
-                            _port.Close();
-                            _needClose = false;
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show($"Failed to close port {_port.PortName}: {ex.Message}", "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            return;
-                        }
-                    }
+                    SetPrintLblText($"{_inDataBatch.Last():f4}", $"{_outDataBatch.Last():f4}");
+                    UpdateChart(_inDataBatch, _outDataBatch);
+                    //Clear buffer after update to UI
+                    _inDataBatch.Clear();
+                    _outDataBatch.Clear();
                 }
-            }
-            catch (Exception ex)
-            {
-                if (ex is IOException || ex is InvalidOperationException)    //Supress IOException and InvalidOperationException
-                    return;
-                else
-                    MessageBox.Show($"Failed to read data from port {_port.PortName}: {ex}", "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
         private void RefreshPortBtn_Click(object sender, EventArgs e)
@@ -157,33 +143,25 @@ namespace SerialDSP
         //General
         private void BeginProcess(object sender, EventArgs e)
         {
-            if (_hasBegin) //action of stop
+            if (_hasBegin) //stop
             {
-                _needClose = true;
+                if (_dataLoopThread != null && _dataLoopThread.IsAlive)
+                    _dataLoopThread.Abort();
+                _port.Close();
                 beginBtn.Text = "Begin";
                 beginBtn.BackColor = Color.FromArgb(27, 161, 226);
                 beginBtn.FlatAppearance.BorderColor = Color.FromArgb(0, 122, 204);
                 beginBtn.FlatAppearance.MouseOverBackColor = Color.FromArgb(122, 193, 255);
             }
-            else
+            else  //begin
             {
-                try
-                {
-                    if (_port.IsOpen)
-                        _port.Close();
-                    _port.BaudRate = (int)baudNumericBox.Value;
-                    _port.ReadBufferSize = (int)readBufferNumericBox.Value;
-                    _port.DataReceived += DataReceived;
-                    _port.Open();
-                    //clear buffer at each start
-                    _port.DiscardInBuffer();
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Fatal error: Failed to open port {_port.PortName}: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    _port.Close();
-                    return;
-                }
+                _port.BaudRate = (int)baudNumericBox.Value;
+                _port.ReadBufferSize = (int)readBufferNumericBox.Value;
+                _port.Open();
+                //consume first line because it will be broken if the port open at the middle of an message (very-likely)
+                _port.ReadLine();
+                _dataLoopThread = new Thread(DataReadLineLoop);
+                _dataLoopThread.Start();
                 _integration.Reset();
                 beginBtn.Text = "End";
                 beginBtn.BackColor = Color.FromArgb(255, 109, 54);
@@ -212,13 +190,13 @@ namespace SerialDSP
             {
                 double original = outChart.ChartAreas[0].AxisY.Minimum;
                 outChart.ChartAreas[0].AxisY.Minimum = Math.Round(original * 1.25, 1);
-                outChart.ChartAreas[0].AxisY.Maximum = -original;
+                outChart.ChartAreas[0].AxisY.Maximum = -outChart.ChartAreas[0].AxisY.Minimum;
             }
             else if (e.Delta > 0)
             {
                 double original = outChart.ChartAreas[0].AxisY.Minimum;
                 outChart.ChartAreas[0].AxisY.Minimum = Math.Round(original / 1.25, 1);
-                outChart.ChartAreas[0].AxisY.Maximum = -original;
+                outChart.ChartAreas[0].AxisY.Maximum = -outChart.ChartAreas[0].AxisY.Minimum;
             }
         }
         private void UpdateBatchSizeChanged(object sender, EventArgs e)
@@ -244,13 +222,29 @@ namespace SerialDSP
                 _updateOutChart(ip, op);
         }
 
-
         private void ClearOutChartBtn_Click(object sender, EventArgs e)
         {
             outChart.ChartAreas[0].AxisX.Minimum = 0;
             foreach (var serie in outChart.Series)
             {
                 serie.Points.Clear();
+            }
+        }
+
+        private bool ParseRegex(string s, out float inPhase, out float outOfPhase)
+        {
+            if (_dataPat.IsMatch(s))
+            {
+                var groups = _dataPat.Match(s).Groups;
+                inPhase = int.Parse(groups[1].Value);
+                outOfPhase = int.Parse(groups[2].Value);
+                return true;
+            }
+            else
+            {
+                inPhase = 0;
+                outOfPhase = 0;
+                return false;
             }
         }
     }
