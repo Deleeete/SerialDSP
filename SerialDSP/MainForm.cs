@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 
@@ -30,7 +31,7 @@ namespace SerialDSP
         private readonly Series _mpsSeries;
 
         //delegate for other threads to invoke and corresponding argument arrays that minimize heap alloc and hence GC
-        private readonly Action<string, string> _setPrintLbl;
+        private readonly Action<float, float> _setPrintLbl;
         private readonly object[] _setPrintLbl_Args = new object[2]; 
         private readonly Action<float> _updateMps;
         private readonly object[] _updateMps_Args = new object[1];
@@ -74,7 +75,6 @@ namespace SerialDSP
             _intgOutSeries = integralChart.Series["Out-of-phase"];
             _intgModulusSeries = integralChart.Series["Modulus"];
             _mpsSeries = mpsChart.Series["Mps"];
-            mpsLbl.Text = string.Empty;
             //Serial port setup
             _port.DataBits = 8;
             _port.StopBits = StopBits.One;
@@ -87,7 +87,12 @@ namespace SerialDSP
             _intgX.Interval = 0;
 
             //import delegates
-            _setPrintLbl = (s, t) => { printInPhaseLbl.Text = s; printOutPhaseLbl.Text = t; };
+            _setPrintLbl = (i, o) => 
+            {
+                printInPhaseLbl.Text = i.ToString("f3");
+                printOutPhaseLbl.Text = o.ToString("f3");
+                printOutputLbl.Text = Math.Sqrt(i * i + o * o).ToString("f3");
+            };
             _updateMps = mps => 
             {
                 _sb.Append(mps);
@@ -153,11 +158,11 @@ namespace SerialDSP
             {
                 _port.ReadLine().InPlaceSingleSplit(',', _splitBuffer);
                 _count++;
-                if (_count == 100)
+                if (_count == 200)
                 {
                     _sw.Stop();
-                    UpdateMps(100_000f / _sw.ElapsedMilliseconds);
-                    SetPrintLblText($"{_inIntegrationBatch.Last():f4}", $"{_outIntegrationBatch.Last():f4}");
+                    UpdateMps(200_000f / _sw.ElapsedMilliseconds);
+                    SetPrintLblText(_inIntegrationBatch.Last(), _outIntegrationBatch.Last());
                     _sw.Reset();
                     _count = 0;
                     _sw.Start();
@@ -212,7 +217,7 @@ namespace SerialDSP
                 _port.ReadBufferSize = (int)readBufferNumericBox.Value;
                 _port.Open();
                 //consume first line because it will be broken if the port open at the middle of an message (very-likely)
-                _port.ReadLine();
+                Task.Run(() => _port.ReadLine());
                 _dataLoopThread = new Thread(DataReadLineLoop);
                 _dataLoopThread.Start();
                 _integration.Reset();
@@ -289,16 +294,16 @@ namespace SerialDSP
         }
 
         //Cross-thread methods
-        private void SetPrintLblText(string s, string t)
+        private void SetPrintLblText(float i, float o)
         {
             if (printInPhaseLbl.InvokeRequired)
             {
-                _setPrintLbl_Args[0] = s;
-                _setPrintLbl_Args[1] = t;
+                _setPrintLbl_Args[0] = i;
+                _setPrintLbl_Args[1] = o;
                 Invoke(_setPrintLbl, _setPrintLbl_Args);
             }
             else
-                _setPrintLbl(s, t);
+                _setPrintLbl(i, o);
         }
         private void UpdateMps(float mps)
         {
