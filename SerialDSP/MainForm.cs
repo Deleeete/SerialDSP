@@ -313,7 +313,7 @@ namespace SerialDSP
 
         private void OnClose(object sender, FormClosedEventArgs e)
         {
-            _dataLoopThread.Abort();
+            _dataLoopThread?.Abort();
             Environment.Exit(0);
         }
 
