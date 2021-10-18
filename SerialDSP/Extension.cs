@@ -1,4 +1,7 @@
-﻿namespace SerialDSP
+﻿using System.IO.Ports;
+using System.Threading.Tasks;
+
+namespace SerialDSP
 {
     public static class StringExtension
     {
@@ -16,5 +19,16 @@
                 }
             }
         }
+    }
+    public static class SerialPortExtension
+    {
+        public static async Task<string> ReadLineAsync(this SerialPort port)
+        {
+            return await Task.Run(() => 
+            {
+                lock (port)
+                    return port.ReadLine();
+            });
+        } 
     }
 }
