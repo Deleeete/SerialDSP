@@ -72,7 +72,7 @@ namespace SerialDSP
             _port.Parity = Parity.None;
             //_port.ReadTimeout = 3000;
             _port.DiscardNull = true;
-            LoadAvailablePorts(false);
+            LoadAvailablePorts();
 
             //manually-bind event handler
             integralChart.MouseWheel += OnIntgChartMouseWheel;
@@ -90,14 +90,14 @@ namespace SerialDSP
         }
 
         //Serial COM
-        private void LoadAvailablePorts(bool isInit)
+        private void LoadAvailablePorts()
         {
             portCombo.Items.Clear();
             portCombo.Items.AddRange(SerialPort.GetPortNames());
             if (portCombo.Items.Count != 0)
                 portCombo.SelectedIndex = 0;
-            else if (!isInit)
-                MessageBox.Show("No available serial port detected. Plug in Arduino and refresh. ", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            else
+                MessageBox.Show("No available serial port detected. Plug in Arduino and refresh again. ", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         private void ReadBufferChanged(object sender, EventArgs e)
         {
@@ -110,7 +110,7 @@ namespace SerialDSP
         }
         private void RefreshPortBtn_Click(object sender, EventArgs e)
         {
-            LoadAvailablePorts(false);
+            LoadAvailablePorts();
         }
         private void PortChanged(object sender, EventArgs e)
         {
@@ -126,6 +126,11 @@ namespace SerialDSP
         {
             if (!_hasBegin) //start
             {
+                if (portCombo.SelectedIndex == -1)
+                {
+                    MessageBox.Show("Select a serial port before continue. ", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
                 //style1: inter
                 beginBtn.Enabled = serialGroupBox.Enabled = false;
                 _hasBegin = true;
