@@ -23,9 +23,7 @@ namespace SerialDSP
         //pre-saved vars
         private readonly SerialPort _port = new SerialPort();
         private readonly StringBuilder _sb = new StringBuilder();
-#pragma warning disable IDE0052 
         private readonly Axis _intgY, _intgX, _mpsX, _mpsY;
-#pragma warning restore IDE0052
         private readonly Series _intgInSeries;
         private readonly Series _intgOutSeries;
         private readonly Series _intgModulusSeries;
@@ -35,8 +33,8 @@ namespace SerialDSP
         //Chart scaling
         private int _horizonPoints;
         //Chart update batches
-        private readonly List<float> _inIntegrationBatch = new List<float>();
-        private readonly List<float> _outIntegrationBatch = new List<float>();
+        private readonly List<double> _inIntegrationBatch = new List<double>();
+        private readonly List<double> _outIntegrationBatch = new List<double>();
         //Integration wrapper
         private readonly Integration _integration = new Integration();
         //string[] for in-place split
@@ -187,7 +185,7 @@ namespace SerialDSP
             {
                 _sw.Stop();
                 UpdateMps(200_000f / _sw.ElapsedMilliseconds);
-                SetPrintLbl(_inIntegrationBatch.Last(), _outIntegrationBatch.Last());
+                UpdatePrintLbl(_inIntegrationBatch.Last(), _integration.AverageOutOfPhase, _integration.AverageNorm, _integration.StandardDeviationNorm);
                 _sw.Reset();
                 _count = 0;
                 _sw.Start();
@@ -237,8 +235,8 @@ namespace SerialDSP
         {
             UpdateBatchSize = (int)updateBatchSizeBox.Value;
             _inIntegrationBatch.Clear();
-            _inIntegrationBatch.Add(0);
             _outIntegrationBatch.Clear();
+            _inIntegrationBatch.Add(0);
             _outIntegrationBatch.Add(0);
         }
         private void AAChanged(object sender, EventArgs e)
@@ -268,13 +266,14 @@ namespace SerialDSP
         }
 
         //Outputs
-        private void SetPrintLbl(float i, float o)
+        private void UpdatePrintLbl(double i, double o, double m, double cv)
         {
             printInPhaseLbl.Text = i.ToString("f4");
             printOutPhaseLbl.Text = o.ToString("f4");
-            printOutputLbl.Text = Math.Sqrt(i * i + o * o).ToString("f4");
+            printNormLbl.Text = m.ToString("f4");
+            printCvLbl.Text = cv.ToString("f4");
         }
-        private void UpdateMps(float mps)
+        private void UpdateMps(double mps)
         {
             _sb.AppendFormat("{0:f4} Mps", mps);
             mpsLbl.Text = _sb.ToString();
@@ -285,11 +284,11 @@ namespace SerialDSP
             if (_mpsSeries.Points.Count >= _horizonPoints)
                 _mpsX.Minimum = _mpsX.Maximum - _horizonPoints;
         }
-        private void UpdateChart(List<float> iIntgs, List<float> oIntgs)
+        private void UpdateChart(List<double> iIntgs, List<double> oIntgs)
         {
             for (int i = 0; i < iIntgs.Count; i++)
             {
-                float iIntg = iIntgs[i], oIntg = oIntgs[i];
+                double iIntg = iIntgs[i], oIntg = oIntgs[i];
                 _intgInSeries.Points.AddY(iIntg);
                 _intgOutSeries.Points.AddY(oIntg);
                 _intgModulusSeries.Points.AddY(Math.Sqrt(iIntg * iIntg + oIntg * oIntg));

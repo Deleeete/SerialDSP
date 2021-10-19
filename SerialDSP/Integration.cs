@@ -1,15 +1,16 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace SerialDSP
 {
     public class Integration
     {
         private readonly object _lockObj = new object();
-        private readonly Queue<float> _bufferIn = new Queue<float>();
-        private readonly Queue<float> _bufferOut = new Queue<float>();
+        private readonly Queue<double> _bufferIn = new Queue<double>();
+        private readonly Queue<double> _bufferOut = new Queue<double>();
+        private readonly Queue<double> _bufferNorm = new Queue<double>();
         private int _size;
-        private float _sumIn = 0f;
-        private float _sumOut = 0f;
 
         /// <summary>
         /// The size of the integration window
@@ -29,24 +30,44 @@ namespace SerialDSP
         /// <summary>
         /// Get value of the in-phase integration
         /// </summary>
-        public float ValueInPhase { get => _sumIn; }
+        public double SumInPhase { get; private set; }
         /// <summary>
         /// Get value of the out-of-phase integration
         /// </summary>
-        public float ValueOutOfPhase { get => _sumOut; }
+        public double SumOutOfPhase { get; private set; }
+        /// <summary>
+        /// Get value of the integration
+        /// </summary>
+        public double SumNorm { get; private set; }
+        /// <summary>
+        /// Get value of the sum of squre error
+        /// </summary>
+        public double SumNormSE { get; private set; }
         /// <summary>
         /// Get average value of the in-phase integration
         /// </summary>
-        public float AverageInPhase { get => _sumIn / WindowSize; }
+        public double AverageInPhase { get; private set; }
         /// <summary>
         /// Get average value of the out-of-phase integration
         /// </summary>
-        public float AverageOutOfPhase { get => _sumOut / WindowSize; }
+        public double AverageOutOfPhase { get; private set; }
+        /// <summary>
+        /// Get average value of the integration
+        /// </summary>
+        public double AverageNorm { get; private set; }
+        /// <summary>
+        /// Get standard deviation of norm
+        /// </summary>
+        public double StandardDeviationNorm { get; private set; }
+        /// <summary>
+        /// Get CV of norm
+        /// </summary>
+        public double CoefficientOfVariation { get; private set; }
 
         public Integration(int windowSize = 64)
         {
-            _bufferIn = new Queue<float>(windowSize);
-            _bufferOut = new Queue<float>(windowSize);
+            _bufferIn = new Queue<double>(windowSize);
+            _bufferOut = new Queue<double>(windowSize);
             _size = windowSize;
             //Fill initial window with zeros
             Reset();
@@ -59,10 +80,30 @@ namespace SerialDSP
         {
             lock (_lockObj)
             {
+                double headIn = _bufferIn.Dequeue();
                 _bufferIn.Enqueue(valueInPhase);
-                _sumIn = _sumIn + valueInPhase - _bufferIn.Dequeue();
+                double headOut = _bufferOut.Dequeue();
                 _bufferOut.Enqueue(valueOutOfPhase);
-                _sumOut = _sumOut + valueOutOfPhase - _bufferOut.Dequeue();
+                double headNorm = _bufferNorm.Dequeue();
+
+                //rolling in-phase
+                SumInPhase = SumInPhase + valueInPhase - headIn;
+                AverageInPhase = SumInPhase / _size;
+                //rolling out-of-phase
+                SumOutOfPhase = SumOutOfPhase + valueOutOfPhase - headOut;
+                AverageOutOfPhase = SumOutOfPhase / _size;
+                //rolling norms
+                double normSquare = AverageInPhase * AverageInPhase + AverageOutOfPhase * AverageOutOfPhase;
+                double norm = Math.Sqrt(normSquare);
+                _bufferNorm.Enqueue(norm);
+                double headNormSE = SquredError(headNorm, AverageNorm);  //calc old SE before updating mean
+                SumNorm = SumNorm + norm - headNorm;                                  //roll sum of norms
+                AverageNorm = SumNorm / _size;
+                double normDiffSquare = SquredError(norm, AverageNorm);
+                SumNormSE = SumNormSE + normDiffSquare - headNormSE;     //roll sum of norms^2
+                //standard deviation
+                StandardDeviationNorm = Math.Sqrt(SumNormSE);
+                CoefficientOfVariation = StandardDeviationNorm / AverageNorm;
             }
         }
         /// <summary>
@@ -74,13 +115,21 @@ namespace SerialDSP
             {
                 _bufferIn.Clear();
                 _bufferOut.Clear();
+                _bufferNorm.Clear();
                 for (int i = 0; i < _size; i++)
                 {
                     _bufferIn.Enqueue(0f);
                     _bufferOut.Enqueue(0f);
+                    _bufferNorm.Enqueue(0f);
                 }
-                _sumIn = _sumOut = 0f;
+                SumInPhase = SumOutOfPhase = SumNorm = SumNormSE = 0f;
             }
+        }
+
+        private static double SquredError(double x, double meanX)
+        {
+            double diff = x - meanX;
+            return diff * diff;
         }
     }
 }
