@@ -59,10 +59,6 @@ namespace SerialDSP
         /// Get standard deviation of norm
         /// </summary>
         public double StandardDeviationNorm { get; private set; }
-        /// <summary>
-        /// Get CV of norm
-        /// </summary>
-        public double CoefficientOfVariation { get; private set; }
 
         public Integration(int windowSize = 64)
         {
@@ -103,7 +99,6 @@ namespace SerialDSP
                 SumNormSE = SumNormSE + normDiffSquare - headNormSE;     //roll sum of norms^2
                 //standard deviation
                 StandardDeviationNorm = Math.Sqrt(SumNormSE);
-                CoefficientOfVariation = StandardDeviationNorm / AverageNorm;
             }
         }
         /// <summary>
@@ -118,11 +113,13 @@ namespace SerialDSP
                 _bufferNorm.Clear();
                 for (int i = 0; i < _size; i++)
                 {
-                    _bufferIn.Enqueue(0f);
-                    _bufferOut.Enqueue(0f);
-                    _bufferNorm.Enqueue(0f);
+                    _bufferIn.Enqueue(0);
+                    _bufferOut.Enqueue(0);
+                    _bufferNorm.Enqueue(0);
                 }
-                SumInPhase = SumOutOfPhase = SumNorm = SumNormSE = 0f;
+                SumInPhase = SumOutOfPhase = SumNorm = SumNormSE = 0;
+                AverageInPhase = AverageOutOfPhase = AverageNorm = 0;
+                StandardDeviationNorm = 0;
             }
         }
 
