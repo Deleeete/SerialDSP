@@ -33,7 +33,7 @@ namespace SerialDSP
         //Chart scaling
         private int _horizonPoints;
         //Chart update batches
-        private object _batchLocker = new object();
+        private readonly object _batchLocker = new object();
         private readonly List<double> _inBatch = new List<double>();
         private readonly List<double> _outBatch = new List<double>();
         private readonly List<double> _normBatch = new List<double>();
@@ -146,8 +146,6 @@ namespace SerialDSP
                 //open
                 _port.Open();
                 _port.DiscardInBuffer();
-                //consume first line and do nothing, because the data should be broken if the port open at the middle of an message (very-likely)
-                await _port.ReadLineAsync();
                 _integration.Reset();
                 //style2: end
                 beginBtn.Text = "End";
@@ -202,8 +200,13 @@ namespace SerialDSP
                 _sw.Start();
             }
             //integration & average
-            float inIntegral = int.Parse(data[0]);
-            float outIntegral = int.Parse(data[1]);
+            //drop any broken data
+            if (!int.TryParse(data[0], out int inIntegral_i))
+                return;
+            if (!int.TryParse(data[1], out int outIntegral_i))
+                return;
+            float inIntegral = inIntegral_i;
+            float outIntegral = outIntegral_i;
             _integration.Roll(inIntegral, outIntegral);
             //Save new values to buffers
             _inBatch.Add(_integration.AverageInPhase);
